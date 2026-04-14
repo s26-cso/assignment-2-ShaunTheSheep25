@@ -2,145 +2,113 @@
 
 .globl make_node
 make_node:
+    # Stack must be 16-byte aligned. Saving ra and s0 (8 bytes each).
     addi sp, sp, -16
-    sw ra, 12(sp)       
-    sw s0, 8(sp)
-    mv s0, a0
-    li a0, 24               # size for 64-bit pointers
+    sd ra, 8(sp)       
+    sd s0, 0(sp)
+    
+    mv s0, a0               # Store the value to be put in node
+    li a0, 24               # Allocation: 4(val) + 4(padding) + 8(left) + 8(right)
     call malloc
-    sw s0, 0(a0)            # store val
-    sd x0, 8(a0)            # left = NULL
-    sd x0, 16(a0)           # right = NULL
-    lw ra, 12(sp)       
-    lw s0, 8(sp)
+    
+    sw s0, 0(a0)            # Store 4-byte int val
+    sd x0, 8(a0)            # Set 8-byte left pointer to NULL
+    sd x0, 16(a0)           # Set 8-byte right pointer to NULL
+    
+    ld ra, 8(sp)       
+    ld s0, 0(sp)
     addi sp, sp, 16
     ret
 
 .globl insert
 insert:
-    addi sp, sp, -16
-    sw ra, 12(sp)       
-    sw s0, 8(sp)
-    sw s1, 4(sp)
-    mv s0, a0
-    mv s1, a1
+    # Using 32 bytes to maintain 16-byte alignment while saving 3 registers
+    addi sp, sp, -32
+    sd ra, 24(sp)       
+    sd s0, 16(sp)
+    sd s1, 8(sp)
+    
+    mv s0, a0               # s0 = current root pointer
+    mv s1, a1               # s1 = value to insert
+    
+    # If root is NULL, create a new node
     beqz s0, insert_null
 
-insert_check:
-    lw t0, 0(s0)
-    beq t0, s1, insert_done
+    lw t0, 0(s0)            # Load current node's value
+    beq t0, s1, insert_done # Value already exists
     blt s1, t0, insert_left
     j insert_right
 
 insert_left:
-    ld a0, 8(s0)            # load 8-byte ptr
+    ld a0, 8(s0)            # Load 8-byte left child pointer
     mv a1, s1
     call insert
-    sd a0, 8(s0)            # store 8-byte ptr
+    sd a0, 8(s0)            # Update left child pointer with result
     j insert_done
 
 insert_right:
-    ld a0, 16(s0)
+    ld a0, 16(s0)           # Load 8-byte right child pointer
     mv a1, s1
     call insert
-    sd a0, 16(s0)
+    sd a0, 16(s0)           # Update right child pointer with result
     j insert_done
 
 insert_null:
     mv a0, s1
-    call make_node
+    call make_node          # Returns new node pointer in a0
     j insert_restore
 
 insert_done:
-    mv a0, s0
+    mv a0, s0               # Return the (possibly updated) root pointer
 
 insert_restore:
-    lw ra, 12(sp)
-    lw s0, 8(sp)
-    lw s1, 4(sp)
-    addi sp, sp, 16
-    ret
-
-.globl get
-get:
-    addi sp, sp, -16
-    sw ra, 12(sp)       
-    sw s0, 8(sp)
-    sw s1, 4(sp)
-    mv s0, a0
-    mv s1, a1
-
-get_check:
-    beqz s0, get_null
-    lw t0, 0(s0)
-    beq t0, s1, get_found
-    blt s1, t0, get_left
-    j get_right
-
-get_left:
-    ld a0, 8(s0)
-    mv a1, s1
-    call get
-    j get_restore
-
-get_right:
-    ld a0, 16(s0)
-    mv a1, s1
-    call get
-    j get_restore
-
-get_found:
-    mv a0, s0
-    j get_restore
-
-get_null:
-    li a0, 0
-
-get_restore:
-    lw ra, 12(sp)       
-    lw s0, 8(sp)
-    lw s1, 4(sp)
-    addi sp, sp, 16
+    ld ra, 24(sp)
+    ld s0, 16(sp)
+    ld s1, 8(sp)
+    addi sp, sp, 32
     ret
 
 .globl getAtMost
 getAtMost:
-    addi sp, sp, -24
-    sw ra, 20(sp)       
-    sw s0, 16(sp)
-    sw s1, 12(sp)
-    sw s2, 8(sp)
-    mv s0, a0               # target val
-    mv s1, a1               # root
-    li s2, -1               # default result
+    addi sp, sp, -32
+    sd ra, 24(sp)       
+    sd s0, 16(sp)           # s0 = target value
+    sd s1, 8(sp)            # s1 = current node pointer
+    sd s2, 0(sp)            # s2 = best candidate found so far
+    
+    mv s0, a0               
+    mv s1, a1               
+    li s2, -1               # Initialize result to -1
 
-pred_check:
-    beqz s1, pred_null
-    lw t0, 0(s1)
-    beq t0, s0, pred_exact
-    blt s0, t0, pred_left
+pred_loop:
+    beqz s1, pred_finish    # If node is NULL, we are done
+    
+    lw t0, 0(s1)            # t0 = current node value
+    beq t0, s0, pred_exact  # Exact match found
+    blt s0, t0, pred_go_left # Target < current: must go left
 
-pred_right:
-    lw t0, 0(s1)
-    mv s2, t0               # update candidate
-    ld s1, 16(s1)           # move right
-    j pred_check
+pred_go_right:
+    # Target > current: current is a candidate, then try to find a better one on the right
+    mv s2, t0               
+    ld s1, 16(s1)           # Move to right child
+    j pred_loop
 
-pred_left:
-    ld s1, 8(s1)            # move left
-    j pred_check
+pred_go_left:
+    # Target < current: current is too big, must go left
+    ld s1, 8(s1)            # Move to left child
+    j pred_loop
 
 pred_exact:
-    lw a0, 0(s1)
-    j pred_restore
+    mv a0, s0               # Return the exact match
+    j pred_exit
 
-pred_null:
-    mv a0, s2
+pred_finish:
+    mv a0, s2               # Return the best candidate found
 
-pred_restore:
-    lw ra, 20(sp)       
-    lw s0, 16(sp)
-    lw s1, 12(sp)
-    lw s2, 8(sp)
-    addi sp, sp, 24
+pred_exit:
+    ld ra, 24(sp)       
+    ld s0, 16(sp)
+    ld s1, 8(sp)
+    ld s2, 0(sp)
+    addi sp, sp, 32
     ret
