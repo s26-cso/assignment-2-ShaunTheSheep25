@@ -13,13 +13,10 @@ main:
     sd s1, 24(sp)
     sd s2, 16(sp)
     sd s3, 8(sp)
-
     la a0, fname
     la a1, read_mode
     call fopen
     mv s0, a0
-
-    # Get size 
     mv a0, s0
     li a1, 0
     li a2, 2
@@ -27,11 +24,8 @@ main:
     mv a0, s0
     call ftell
     mv s1, a0               
-    
     li s2, 0                # left pointer
     addi s3, s1, -1         # initial right pointer
-
-    # Check for trailing newline
     mv a0, s0
     mv a1, s3
     li a2, 0
@@ -43,8 +37,7 @@ main:
     addi s3, s3, -1         # skip newline if present
 
 pal_loop:
-    bge s2, s3, is_pal      # O(n) time check 
-    
+    bge s2, s3, is_pal
     mv a0, s0
     mv a1, s2
     li a2, 0
@@ -52,7 +45,6 @@ pal_loop:
     mv a0, s0
     call fgetc
     mv s4, a0               
-
     mv a0, s0
     mv a1, s3
     li a2, 0
@@ -60,9 +52,7 @@ pal_loop:
     mv a0, s0
     call fgetc
     mv s5, a0               
-
     bne s4, s5, not_pal
-    
     addi s2, s2, 1
     addi s3, s3, -1
     j pal_loop
@@ -87,3 +77,4 @@ cleanup:
     addi sp, sp, 48
     li a0, 0
     ret
+
