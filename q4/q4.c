@@ -9,7 +9,7 @@ int main(void)
     int a, b;
     while (scanf("%s %d %d", op, &a, &b) == 3)
     {
-        char name[20] = "lib";
+        char name[20] = "./lib"; // was initially just lib, didn't work because full path wasn't specified
         strcat(name, op);
         strcat(name, ".so");
         void* f = dlopen(name, RTLD_LAZY);
